@@ -8,6 +8,12 @@
 // ===== Query Key 工厂 =====
 
 export const QK = {
+  // AlphaQuant native integration (read-only).
+  alphaquantRuns: ['alphaquant', 'runs'] as const,
+  alphaquantRun: (id: string) => ['alphaquant', 'run', id] as const,
+  alphaquantBacktest: (id: string) => ['alphaquant', 'backtest', id] as const,
+  alphaquantBacktestRecords: (id: string, kind: string, day: string, symbol: string, offset: number) => ['alphaquant', 'backtest', id, kind, day, symbol, offset] as const,
+  alphaquantBacktestMarkers: (id: string, symbol: string) => ['alphaquant', 'backtest', id, 'markers', symbol] as const,
   // 全局 / 共享 (Layout 预取)
   capabilities:   ['capabilities'] as const,
   settings:       ['settings'] as const,

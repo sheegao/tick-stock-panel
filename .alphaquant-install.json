@@ -1,0 +1,11 @@
+{
+  "frontend/src/custom/alphaquant/extension.tsx": "63bda5dbe10c739715172b6f12aa6b3e28c021ca60cac0da75b8eec8648530c8",
+  "frontend/src/custom/alphaquant/api.ts": "88744c7674c8c8ba64afdc310e86c9d67d15fe6c9047653493df768b2d516942",
+  "frontend/src/custom/alphaquant/model.ts": "d82126e02d5934c532bcb45bad9759319b9799b1898fe49fcb3a91426fbe966b",
+  "frontend/src/custom/alphaquant/workbench.tsx": "f1d69ecdd68db6cfdf05863b6b8819682d0ea251352de5db43b32a67a84099da",
+  "backend/app/custom/alphaquant_panel.py": "88c2fa2418726c152bf82eab42fa948a55c6a8e73b9556bf2c3b697c05c50b32",
+  "frontend/src/lib/api.ts": "acadbc04f93cc9860c103f1456a4f1ce1761db2a03928a55369b18648036ec14",
+  "frontend/src/lib/queryKeys.ts": "30234de7e6e6210623f9966030c7b88878ba84f58b4f3e5de6c31942cd713d09",
+  "docs/alphaquant.md": "0f8b9383019e8e78224809fca911445834be0c995a9863e1381ac43d9b0a02bd",
+  "frontend/src/custom/alphaquant/history.tsx": "7fed8fcfe0cf74f3dc86c19ee3c907e9e5cb8ef12c606a0bc833e389b3d58e08"
+}
