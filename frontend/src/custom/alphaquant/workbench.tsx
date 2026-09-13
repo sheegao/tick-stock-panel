@@ -17,10 +17,28 @@ const labels: Record<string, string> = { signal_emitted: '已发信号', filtere
 const tabs = ['候选与图表', '持仓订单', '风控记录', '决策复盘'] as const
 
 function RunPicker({ runs, value, onChange }: { runs: Run[]; value: string; onChange: (id: string) => void }) {
-  return <select aria-label="AlphaQuant 运行" className="max-w-full min-w-0 rounded-md border border-border bg-surface px-3 py-2 text-sm" value={value} onChange={e => onChange(e.target.value)}>
-    <option value="" disabled>选择策略运行</option>
-    {runs.map(run => <option key={run.id} value={run.id}>{run.start_day ? `${run.start_day} → ${run.end_day}` : run.trading_day || '日期未知'} · {run.strategy_id || run.source_run_id} · {run.is_backtest ? '历史回测' : modes[run.mode] || run.mode} · {run.label} [{run.id.slice(-6)}]</option>)}
-  </select>
+  const [filter, setFilter] = useState('')
+  const [open, setOpen] = useState(false)
+  const ql = filter.trim().toLowerCase()
+  const filtered = ql ? runs.filter(r => r.label.toLowerCase().includes(ql) || r.source_run_id.toLowerCase().includes(ql) || r.id.includes(ql)) : runs
+  const selected = runs.find(r => r.id === value)
+  const displayText = selected
+    ? `${selected.start_day ? `${selected.start_day}→${selected.end_day}` : selected.trading_day || '?'} · ${selected.is_backtest ? '回测' : modes[selected.mode] || selected.mode} · ${selected.label}`
+    : '选择策略运行'
+  return <div className="relative min-w-0 flex-1 max-w-2xl">
+    <div className="flex gap-1">
+      <input aria-label="搜索运行" className="min-w-0 flex-1 rounded-md border border-border bg-surface px-3 py-2 text-sm" placeholder="搜索运行名称，如 v3s、2025-poolflow…" value={filter} onChange={e => { setFilter(e.target.value); setOpen(true) }} onFocus={() => setOpen(true)} />
+      <button type="button" className={cn(button, !open && 'text-accent')} onClick={() => setOpen(o => !o)}>{open ? '收起' : '展开'}</button>
+    </div>
+    {open && <div className="absolute z-30 mt-1 max-h-96 w-full overflow-y-auto rounded-md border border-border bg-surface shadow-lg">
+      {filtered.length === 0 && <p className="px-3 py-4 text-sm text-muted">无匹配运行</p>}
+      {filtered.slice(0, 200).map(run => <button key={run.id} type="button" className={cn('block w-full truncate px-3 py-2 text-left text-sm hover:bg-elevated', run.id === value && 'bg-accent/10 text-accent')} onClick={() => { onChange(run.id); setOpen(false) }}>
+        {run.start_day ? `${run.start_day} → ${run.end_day}` : run.trading_day || '日期未知'} · {run.is_backtest ? '历史回测' : modes[run.mode] || run.mode} · {run.label} <span className="text-xs text-muted">[{run.id.slice(-6)}]</span>
+      </button>)}
+      {filtered.length > 200 && <p className="px-3 py-2 text-xs text-muted">仅显示前 200 条，共 {filtered.length} 条，请输入更精确的关键词</p>}
+    </div>}
+    {!open && selected && <p className="mt-1 truncate text-xs text-muted">{displayText}</p>}
+  </div>
 }
 function Table({ headings, children, empty }: { headings: string[]; children: ReactNode; empty: boolean }) {
   return <div className="overflow-x-auto rounded-lg border border-border"><table className="w-full text-left text-sm"><thead className="bg-elevated text-secondary"><tr>{headings.map(h => <th key={h} className="whitespace-nowrap px-3 py-2 font-medium">{h}</th>)}</tr></thead><tbody className="divide-y divide-border">{empty ? <tr><td colSpan={headings.length} className="px-3 py-6 text-center text-muted">此运行暂无记录</td></tr> : children}</tbody></table></div>
