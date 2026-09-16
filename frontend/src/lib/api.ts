@@ -455,7 +455,34 @@ export interface MarketSnapshotRow {
   market_cap?: number | null
   float_market_cap?: number | null
   consecutive_limit_ups?: number | null
+  consecutive_limit_downs?: number | null
+  signal_limit_up?: boolean | null
+  signal_limit_down?: boolean | null
+  signal_broken_limit_up?: boolean | null
+  signal_limit_down_recovery?: boolean | null
+  momentum_20d?: number | null
+  annual_vol_20d?: number | null
   [key: string]: any
+}
+
+export interface StAnnouncement {
+  id: string
+  symbol: string
+  name: string
+  title: string
+  category: string
+  importance: 'high' | 'medium'
+  published_at: string | null
+  url: string | null
+}
+
+export interface StAnnouncementsResponse {
+  date: string
+  items: StAnnouncement[]
+  partial: boolean
+  cached: boolean
+  source: { name: string; url: string }
+  retrieved_at: string
 }
 
 export interface OverviewDimensionRankItem {
@@ -2644,6 +2671,8 @@ export const api = {
     ),
   marketSnapshot: () =>
     request<{ as_of: string | null; rows: MarketSnapshotRow[] }>('/api/screener/market-snapshot'),
+  stAnnouncements: (date: string) =>
+    request<StAnnouncementsResponse>(`/api/st-analysis/announcements?date=${encodeURIComponent(date)}`),
   overviewMarket: (asOf?: string) => request<OverviewMarket>(`/api/overview/market${asOf ? `?as_of=${asOf}` : ''}`),
 
   // 概念涨幅轮动矩阵: 每列(日期)各自把所有概念按当天涨幅从高到低排序
