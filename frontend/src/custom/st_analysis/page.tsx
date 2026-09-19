@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Activity,
   AlertTriangle,
@@ -10,6 +10,7 @@ import {
   Flame,
   RefreshCw,
   Search,
+  Share2,
   ShieldAlert,
   TrendingDown,
   TrendingUp,
@@ -20,11 +21,13 @@ import {
 import { EmptyState } from '@/components/EmptyState'
 import { PageHeader } from '@/components/PageHeader'
 import { StockPreviewDialog, toNavItems } from '@/components/StockPreviewDialog'
-import { api, type MarketSnapshotRow, type StAnnouncementsResponse } from '@/lib/api'
+import { api, type MarketSnapshotRow, type StAnnouncement, type StAnnouncementsResponse } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { fmtBigNum, fmtPct, priceColorClass } from '@/lib/format'
 import { QK } from '@/lib/queryKeys'
 import { buildStAnalysis, type StCategory, type StStock } from './model'
+import { buildStDailyReport, type StDailyReport } from './share'
+import { StShareDialog } from './share-dialog'
 
 type CategoryFilter = 'all' | StCategory
 type SortMode = 'change' | 'turnover' | 'amount' | 'market-cap'
@@ -65,7 +68,10 @@ export function StAnalysisPage() {
   const [sortMode, setSortMode] = useState<SortMode>('change')
   const [search, setSearch] = useState('')
   const [announcementDate, setAnnouncementDate] = useState('')
+  const [showAllAnnouncements, setShowAllAnnouncements] = useState(false)
+  const queryClient = useQueryClient()
   const [preview, setPreview] = useState<{ symbol: string; name?: string } | null>(null)
+  const [shareReport, setShareReport] = useState<StDailyReport | null>(null)
 
   const snapshot = useQuery({
     queryKey: QK.marketSnapshot,
@@ -77,10 +83,14 @@ export function StAnalysisPage() {
     if (!announcementDate && snapshot.data?.as_of) setAnnouncementDate(snapshot.data.as_of)
   }, [announcementDate, snapshot.data?.as_of])
   const announcements = useQuery({
-    queryKey: QK.stAnnouncements(announcementDate),
-    queryFn: () => api.stAnnouncements(announcementDate),
+    queryKey: QK.stAnnouncements(announcementDate, showAllAnnouncements),
+    queryFn: () => api.stAnnouncements(announcementDate, showAllAnnouncements),
     enabled: !!announcementDate,
     staleTime: 15 * 60_000,
+  })
+  const refreshAnnouncements = useMutation({
+    mutationFn: (context: { date: string; all: boolean }) => api.stAnnouncements(context.date, context.all, true),
+    onSuccess: (data, context) => queryClient.setQueryData(QK.stAnnouncements(context.date, context.all), data),
   })
 
   const visibleStocks = useMemo(() => {
@@ -127,9 +137,16 @@ export function StAnalysisPage() {
     <>
       <PageHeader
         title="ST 板块分析"
+        className="flex-wrap [&>div:first-child]:min-w-0 [&>div:first-child]:flex-wrap"
         subtitle={`${snapshot.data?.as_of ?? '最新'} · 名称标记口径 · ${analysis.total} 只`}
         titleExtra={<span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-medium text-amber-400">风险观察</span>}
         right={(
+          <div className="flex shrink-0 items-center gap-2">
+          <button
+            onClick={() => setShareReport(buildStDailyReport(snapshot.data?.as_of ?? null, analysis, announcements.data, 20, announcements.isError || (refreshAnnouncements.isError && refreshAnnouncements.variables?.date === announcementDate) ? '查询失败' : undefined))}
+            disabled={!snapshot.data?.as_of || !analysis.total}
+            className="flex items-center gap-1.5 rounded-btn border border-border px-2.5 py-1.5 text-xs text-accent hover:bg-surface disabled:opacity-50"
+          ><Share2 className="h-3.5 w-3.5" />生成雪球日报</button>
           <button
             onClick={() => snapshot.refetch()}
             disabled={snapshot.isFetching}
@@ -138,6 +155,7 @@ export function StAnalysisPage() {
           >
             <RefreshCw className={cn('h-4 w-4', snapshot.isFetching && 'animate-spin')} />
           </button>
+          </div>
         )}
       />
 
@@ -168,17 +186,20 @@ export function StAnalysisPage() {
                 <LimitPanel analysis={analysis} onOpen={openStock} />
               </section>
 
-              <Momentum20Panel analysis={analysis} onOpen={openStock} />
+              {([5, 10, 20] as const).map(days => <MomentumPanel key={days} days={days} analysis={analysis} onOpen={openStock} />)}
 
               <AnnouncementsPanel
+                key={announcementDate}
                 date={announcementDate}
-                maxDate={snapshot.data?.as_of ?? undefined}
+                maxDate={new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' })}
+                showAll={showAllAnnouncements}
+                onShowAllChange={setShowAllAnnouncements}
                 onDateChange={setAnnouncementDate}
                 data={announcements.data}
                 isLoading={announcements.isLoading}
-                isFetching={announcements.isFetching}
-                error={announcements.error}
-                onRefresh={() => announcements.refetch()}
+                isFetching={announcements.isFetching || refreshAnnouncements.isPending}
+                error={announcements.error || (refreshAnnouncements.variables?.date === announcementDate ? refreshAnnouncements.error : null)}
+                onRefresh={() => refreshAnnouncements.mutate({ date: announcementDate, all: showAllAnnouncements })}
                 onOpen={openStock}
               />
 
@@ -221,6 +242,7 @@ export function StAnalysisPage() {
         </div>
       </main>
 
+      {shareReport && <StShareDialog report={shareReport} onClose={() => setShareReport(null)} />}
       {preview && (
         <StockPreviewDialog
           symbol={preview.symbol}
@@ -374,15 +396,17 @@ function LimitStockGroup({ title, stocks, empty, className, onOpen }: {
   )
 }
 
-function Momentum20Panel({ analysis, onOpen }: {
+function MomentumPanel({ analysis, onOpen, days }: {
+  days: 5 | 10 | 20
   analysis: ReturnType<typeof buildStAnalysis>
   onOpen: (symbol: string, name?: string) => void
 }) {
-  const leaders = analysis.momentum20Leaders.slice(0, 20)
+  const ranking = analysis.momentumRanks[days]
+  const leaders = ranking.leaders.slice(0, 20)
   return (
     <section className="overflow-hidden rounded-2xl border border-border bg-surface/80 shadow-sm backdrop-blur">
       <div className="flex items-center justify-between gap-4 border-b border-border px-4 py-3">
-        <div><div className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-bull" /><h2 className="text-sm font-semibold">近 20 个交易日涨幅榜</h2></div><p className="mt-1 text-[11px] text-muted">前复权收盘价口径 · 有效 {analysis.momentum20Count} 只 · 平均 {fmtPct(analysis.avgMomentum20)} · 中位 {fmtPct(analysis.medianMomentum20)}</p></div>
+        <div><div className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-bull" /><h2 className="text-sm font-semibold">近 {days} 个交易日涨幅榜</h2></div><p className="mt-1 text-[11px] text-muted">前复权收盘价 / {days} 根日线前收盘价 − 1 · 有效 {ranking.count} 只 · 平均 {fmtPct(ranking.average)} · 中位 {fmtPct(ranking.median)}</p></div>
       </div>
       <div className="grid grid-cols-1 divide-y divide-border/60 md:grid-cols-2 md:divide-x md:divide-y-0 xl:grid-cols-4">
         {[0, 5, 10, 15].map(start => (
@@ -391,20 +415,22 @@ function Momentum20Panel({ analysis, onOpen }: {
               <button key={stock.symbol} onClick={() => onOpen(stock.symbol, stock.name ?? undefined)} className="flex w-full items-center gap-2 py-2.5 text-left hover:text-accent">
                 <span className={cn('w-5 text-center text-xs font-semibold tabular-nums', start + offset < 3 ? 'text-amber-400' : 'text-muted')}>{start + offset + 1}</span>
                 <span className="min-w-0 flex-1"><span className="block truncate text-xs font-medium">{stock.name || stock.symbol}</span><span className="text-[10px] text-muted">今日 {fmtPct(stock.change_pct)}</span></span>
-                <span className={cn('text-xs font-semibold tabular-nums', priceColorClass(stock.momentum_20d))}>{fmtPct(stock.momentum_20d)}</span>
+                <span className={cn('text-xs font-semibold tabular-nums', priceColorClass(stock[`momentum_${days}d`]))}>{fmtPct(stock[`momentum_${days}d`])}</span>
               </button>
             ))}
           </div>
         ))}
       </div>
-      {!leaders.length && <div className="px-4 py-10 text-center text-xs text-muted">历史窗口不足，暂无 20 日动量数据</div>}
+      {!leaders.length && <div className="px-4 py-10 text-center text-xs text-muted">历史窗口不足，暂无 {days} 日动量数据</div>}
     </section>
   )
 }
 
-function AnnouncementsPanel({ date, maxDate, onDateChange, data, isLoading, isFetching, error, onRefresh, onOpen }: {
+function AnnouncementsPanel({ date, maxDate, showAll, onShowAllChange, onDateChange, data, isLoading, isFetching, error, onRefresh, onOpen }: {
   date: string
   maxDate?: string
+  showAll: boolean
+  onShowAllChange: (all: boolean) => void
   onDateChange: (date: string) => void
   data?: StAnnouncementsResponse
   isLoading: boolean
@@ -413,30 +439,65 @@ function AnnouncementsPanel({ date, maxDate, onDateChange, data, isLoading, isFe
   onRefresh: () => void
   onOpen: (symbol: string, name?: string) => void
 }) {
+  const queryClient = useQueryClient()
+  const [importMessage, setImportMessage] = useState('')
+  const historyImport = useMutation({
+    mutationFn: async (file: File) => {
+      if (file.size > 5 * 1024 * 1024) throw new Error('历史名单文件不能超过 5 MB')
+      return api.stMembershipImport(JSON.parse((await file.text()).replace(/^\uFEFF/, '')))
+    },
+    onSuccess: data => {
+      setImportMessage(`已导入 ${data.imported} 个核验区间`)
+      void queryClient.invalidateQueries({ queryKey: ['st-analysis', 'announcements'] })
+    },
+    onError: error => setImportMessage(error instanceof Error ? error.message : '历史区间导入失败'),
+  })
   return (
     <section className="overflow-hidden rounded-2xl border border-border bg-surface/80 shadow-sm backdrop-blur">
       <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div><div className="flex items-center gap-2"><CalendarDays className="h-4 w-4 text-violet-400" /><h2 className="text-sm font-semibold">每日 ST 重要公告</h2></div><p className="mt-1 text-[11px] text-muted">退市/风险警示、重整、监管、债务诉讼、资本运作、交易提示与业绩公告</p></div>
-        <div className="flex items-center gap-2">
+        <div><div className="flex items-center gap-2"><CalendarDays className="h-4 w-4 text-violet-400" /><h2 className="text-sm font-semibold">每日 ST 公告档案</h2></div><p className="mt-1 text-[11px] text-muted">全市场公告逐页采集后筛选 · 元数据永久保存 · 支持 PDF 归档与正文查看</p></div>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1 text-[11px] text-muted"><input type="checkbox" checked={showAll} onChange={event => onShowAllChange(event.target.checked)} />全部 ST 公告</label>
+          <label className="cursor-pointer text-[11px] text-accent">{historyImport.isPending ? '导入中…' : '导入历史名单'}<input type="file" accept=".json" disabled={historyImport.isPending} className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) historyImport.mutate(file); event.target.value = '' }} /></label>
           <input type="date" value={date} max={maxDate} onChange={event => onDateChange(event.target.value)} className="h-8 rounded-btn border border-border bg-base px-2 text-xs outline-none focus:border-accent" />
           <button onClick={onRefresh} disabled={isFetching || !date} className="rounded-btn p-1.5 text-muted hover:bg-elevated hover:text-foreground disabled:opacity-50" title="刷新公告"><RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin')} /></button>
         </div>
       </div>
-      {data?.partial && <div className="border-b border-amber-400/20 bg-amber-400/5 px-4 py-2 text-[11px] text-amber-400">部分关键词查询失败或结果超出分页上限，本次列表可能不完整。</div>}
+      {importMessage && <div className="border-b border-border px-4 py-2 text-[11px] text-secondary">{importMessage}</div>}
+      {data?.partial && <div className="border-b border-amber-400/20 bg-amber-400/5 px-4 py-2 text-[11px] text-amber-400">部分页面采集失败、数量校验未通过或达到安全上限，本次列表可能不完整；可刷新重试。</div>}
+      {data?.stale && <div className="border-b border-amber-400/20 bg-amber-400/5 px-4 py-2 text-[11px] text-amber-400">本次源站刷新失败或不完整，展示上次保存的档案；请核对采集时间。</div>}
+      {data?.history_warning && <div className="border-b border-border bg-elevated/40 px-4 py-2 text-[11px] text-muted">历史口径：缺少完整日期名单的证券，按公告时证券简称识别 ST，不使用最新名单倒推。可导入经过公告生效日期核验的 ST / 非 ST 简称区间。</div>}
       {isLoading ? <div className="flex items-center justify-center gap-2 px-4 py-12 text-xs text-muted"><RefreshCw className="h-4 w-4 animate-spin" />正在从巨潮资讯获取公告…</div> : error ? <div className="px-4 py-10 text-center text-xs text-bear">{error.message || '公告查询失败，请稍后重试'}</div> : data?.items.length ? (
         <div className="divide-y divide-border/60">
           {data.items.map(item => (
-            <div key={item.id} className="flex flex-col gap-2 px-4 py-3 hover:bg-elevated/40 sm:flex-row sm:items-center">
+            <div key={item.id} className="px-4 py-3 hover:bg-elevated/40"><div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <button onClick={() => onOpen(qualifiedSymbol(item.symbol), item.name)} className="w-36 shrink-0 text-left hover:text-accent"><span className="block truncate text-xs font-medium">{item.name || item.symbol}</span><span className="text-[10px] text-muted">{item.symbol}</span></button>
-              <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-1.5"><span className={cn('rounded px-1.5 py-0.5 text-[10px]', item.importance === 'high' ? 'bg-red-400/10 text-red-400' : 'bg-amber-400/10 text-amber-400')}>{item.category}</span><span className="text-xs text-foreground">{item.title}</span></div><div className="mt-1 text-[10px] text-muted">{item.published_at ? new Date(item.published_at).toLocaleString('zh-CN', { hour12: false }) : date}</div></div>
+              <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-1.5"><span className={cn('rounded px-1.5 py-0.5 text-[10px]', item.importance === 'high' ? 'bg-red-400/10 text-red-400' : 'bg-amber-400/10 text-amber-400')}>{item.category}</span><span className="text-xs text-foreground">{item.title}</span></div><div className="mt-1 text-[10px] text-muted">{item.published_at ? new Date(item.published_at).toLocaleString('zh-CN', { hour12: false }) : date} · {item.membership_basis === 'verified_interval' ? '核验历史区间' : item.membership_basis === 'snapshot' ? '日期名单快照' : '公告时简称'}</div></div>
               {item.url && <a href={item.url} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-1 text-[11px] text-accent hover:underline">公告原文<ExternalLink className="h-3 w-3" /></a>}
-            </div>
+            </div><AnnouncementDocument date={date} item={item} /></div>
           ))}
         </div>
-      ) : <div className="px-4 py-10 text-center text-xs text-muted">该日未检索到当前 ST 标的的重要公告</div>}
-      {data && <div className="flex items-center justify-between border-t border-border px-4 py-2 text-[10px] text-muted"><span>{data.cached ? '15 分钟缓存' : '刚刚获取'} · 仅按标题关键词筛选</span><a href={data.source.url} target="_blank" rel="noreferrer" className="hover:text-accent">来源：{data.source.name}</a></div>}
+      ) : <div className="px-4 py-10 text-center text-xs text-muted">该日未发现符合所选口径的 ST 公告</div>}
+      {data && <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2 text-[10px] text-muted"><span>{data.cached ? '本地档案' : '已采集并保存'} · 全市场 {data.market_announcement_count ?? '—'} 条 / ST {data.st_announcement_count ?? '—'} 条 · 展示 {data.items.length} 条 · {showAll ? '全部公告' : '重要程度按标题规则筛选'} · 采集 {new Date(data.retrieved_at).toLocaleString('zh-CN', { hour12: false })}</span><a href={data.source.url} target="_blank" rel="noreferrer" className="hover:text-accent">来源：{data.source.name}</a></div>}
     </section>
   )
+}
+
+function AnnouncementDocument({ date, item }: { date: string; item: StAnnouncement }) {
+  const document = useMutation({ mutationFn: () => api.stArchiveDocument(date, item.id) })
+  const statusLabels: Record<string, string> = {
+    ready: '正文已提取', needs_ocr: '扫描件：需 OCR', parse_failed: 'PDF 解析失败',
+    parser_unavailable: '需安装 pypdf 依赖', text_limit: '正文超过解析安全上限', not_downloaded: '未归档',
+  }
+  return <div className="mt-2 text-[11px]">
+    <div className="flex flex-wrap items-center gap-3">
+      <button disabled={document.isPending || !item.url} onClick={() => document.mutate()} className="text-accent hover:underline disabled:opacity-50">{document.isPending ? '正在归档…' : '归档 PDF / 查看正文'}</button>
+      <span className="text-muted">{statusLabels[document.data?.status ?? item.document_status ?? 'not_downloaded'] ?? item.document_status}</span>
+      {(document.data || (item.document_status && item.document_status !== 'not_downloaded')) && <a href={`/api/st-analysis/documents/${encodeURIComponent(item.id)}/pdf`} target="_blank" rel="noreferrer" className="text-accent hover:underline">本地 PDF</a>}
+    </div>
+    {document.error && <p className="mt-2 text-bear">{document.error.message}</p>}
+    {document.data?.text && <details open className="mt-2"><summary className="cursor-pointer text-muted">公告正文（机器提取，重要事项请核对原文）</summary><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-base p-3 font-sans text-xs leading-relaxed text-secondary">{document.data.text}</pre></details>}
+  </div>
 }
 
 function RankingCard({ icon: Icon, title, stocks, metric, metricClass, onOpen }: {

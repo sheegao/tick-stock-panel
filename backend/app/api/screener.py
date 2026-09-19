@@ -529,7 +529,7 @@ def market_snapshot(request: Request):
         "turnover_rate", "vol_ratio_5d", "total_shares", "float_shares",
         "market_cap", "float_market_cap", "consecutive_limit_ups",
         "consecutive_limit_downs", "signal_limit_up", "signal_limit_down",
-        "signal_broken_limit_up", "signal_limit_down_recovery", "momentum_20d",
+        "signal_broken_limit_up", "signal_limit_down_recovery", "momentum_5d", "momentum_10d", "momentum_20d",
         "annual_vol_20d",
     ]
     df = df.select([c for c in cols if c in df.columns])

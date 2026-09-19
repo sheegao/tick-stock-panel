@@ -7,6 +7,19 @@ import {
 } from './model'
 
 describe('ST analysis model', () => {
+  it('ranks each 5/10/20 day window independently and excludes null/nonfinite values', () => {
+    const analysis = buildStAnalysis([
+      { symbol: '1', name: 'ST甲', momentum_5d: 0.2, momentum_10d: -0.1, momentum_20d: null },
+      { symbol: '2', name: '*ST乙', momentum_5d: -0.05, momentum_10d: 0.1, momentum_20d: 0.4 },
+      { symbol: '3', name: 'ST丙', momentum_5d: Number.NaN, momentum_10d: null },
+      { symbol: '4', name: '普通股', momentum_5d: 1 },
+    ])
+    expect(analysis.momentumRanks[5].leaders.map(row => row.symbol)).toEqual(['1', '2'])
+    expect(analysis.momentumRanks[10].leaders.map(row => row.symbol)).toEqual(['2', '1'])
+    expect(analysis.momentumRanks[20].count).toBe(1)
+    expect(analysis.momentumRanks[5].average).toBeCloseTo(0.075)
+    expect(analysis.momentumRanks[10].median).toBe(0)
+  })
   it('matches the repository-wide risk-warning name convention', () => {
     expect(classifyStName('ST海王')).toBe('st')
     expect(classifyStName('*ST美丽')).toBe('star-st')

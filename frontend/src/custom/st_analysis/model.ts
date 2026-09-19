@@ -42,6 +42,7 @@ export interface StAnalysis {
   avgMomentum20: number | null
   medianMomentum20: number | null
   momentum20Leaders: StStock[]
+  momentumRanks: Record<5 | 10 | 20, { leaders: StStock[]; count: number; average: number | null; median: number | null }>
 }
 
 function finiteNumber(value: unknown): number | null {
@@ -121,6 +122,13 @@ export function buildStAnalysis(rows: MarketSnapshotRow[]): StAnalysis {
     .filter(row => finiteNumber(row.momentum_20d) != null)
     .sort((a, b) => (finiteNumber(b.momentum_20d) ?? 0) - (finiteNumber(a.momentum_20d) ?? 0))
   const momentum20Values = momentum20Leaders.map(row => finiteNumber(row.momentum_20d) as number)
+  const momentumRanks = Object.fromEntries(([5, 10, 20] as const).map(days => {
+    const field = `momentum_${days}d`
+    const leaders = stocks.filter(row => finiteNumber(row[field]) != null)
+      .sort((a, b) => (b[field] as number) - (a[field] as number) || a.symbol.localeCompare(b.symbol))
+    const values = leaders.map(row => row[field] as number)
+    return [days, { leaders, count: leaders.length, average: average(values), median: median(values) }]
+  })) as StAnalysis['momentumRanks']
 
   const breadthScore = changes.length ? (upCount + flatCount * 0.5) / changes.length : 0.5
   const averageChangeScore = Math.max(0, Math.min(1, 0.5 + (average(changes) ?? 0) / 0.1))
@@ -137,6 +145,7 @@ export function buildStAnalysis(rows: MarketSnapshotRow[]): StAnalysis {
           : '高涨'
 
   return {
+    momentumRanks,
     stocks,
     total: stocks.length,
     stCount: stocks.filter(row => row.stCategory === 'st').length,

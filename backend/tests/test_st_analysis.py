@@ -21,6 +21,8 @@ def test_market_snapshot_exposes_existing_limit_and_momentum_fields(monkeypatch)
             "signal_limit_down_recovery": [False],
             "consecutive_limit_downs": [0],
             "momentum_20d": [0.123],
+            "momentum_5d": [0.05],
+            "momentum_10d": [0.10],
             "annual_vol_20d": [0.456],
         }
     )
@@ -51,6 +53,8 @@ def test_market_snapshot_exposes_existing_limit_and_momentum_fields(monkeypatch)
             "signal_limit_down_recovery": False,
             "consecutive_limit_downs": 0,
             "momentum_20d": 0.123,
+            "momentum_5d": 0.05,
+            "momentum_10d": 0.10,
             "annual_vol_20d": 0.456,
         }
     ]

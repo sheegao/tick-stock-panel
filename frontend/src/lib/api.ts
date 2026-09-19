@@ -461,6 +461,8 @@ export interface MarketSnapshotRow {
   signal_broken_limit_up?: boolean | null
   signal_limit_down_recovery?: boolean | null
   momentum_20d?: number | null
+  momentum_5d?: number | null
+  momentum_10d?: number | null
   annual_vol_20d?: number | null
   [key: string]: any
 }
@@ -471,9 +473,20 @@ export interface StAnnouncement {
   name: string
   title: string
   category: string
-  importance: 'high' | 'medium'
+  importance: 'high' | 'medium' | 'low'
   published_at: string | null
   url: string | null
+  membership_basis?: 'snapshot' | 'verified_interval' | 'announcement_name'
+  document_status?: string
+}
+
+export interface StDocument {
+  id: string
+  status: string
+  text: string
+  sha256: string
+  archived_at: string
+  url: string
 }
 
 export interface StAnnouncementsResponse {
@@ -483,6 +496,13 @@ export interface StAnnouncementsResponse {
   cached: boolean
   source: { name: string; url: string }
   retrieved_at: string
+  stale?: boolean
+  persisted?: boolean
+  market_announcement_count?: number
+  st_announcement_count?: number
+  pages?: number
+  snapshot_available?: boolean
+  history_warning?: boolean
 }
 
 export interface OverviewDimensionRankItem {
@@ -2671,8 +2691,12 @@ export const api = {
     ),
   marketSnapshot: () =>
     request<{ as_of: string | null; rows: MarketSnapshotRow[] }>('/api/screener/market-snapshot'),
-  stAnnouncements: (date: string) =>
-    request<StAnnouncementsResponse>(`/api/st-analysis/announcements?date=${encodeURIComponent(date)}`),
+  stAnnouncements: (date: string, includeAll = false, refresh = false) =>
+    request<StAnnouncementsResponse>(`/api/st-analysis/announcements?date=${encodeURIComponent(date)}&include_all=${includeAll}&refresh=${refresh}`, { timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS }),
+  stArchiveDocument: (date: string, id: string) =>
+    request<StDocument>(`/api/st-analysis/documents/${encodeURIComponent(id)}?date=${encodeURIComponent(date)}`, { method: 'POST', timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS }),
+  stMembershipImport: (payload: unknown) =>
+    request<{ imported: number }>('/api/st-analysis/membership/import', { method: 'POST', body: JSON.stringify(payload) }),
   overviewMarket: (asOf?: string) => request<OverviewMarket>(`/api/overview/market${asOf ? `?as_of=${asOf}` : ''}`),
 
   // 概念涨幅轮动矩阵: 每列(日期)各自把所有概念按当天涨幅从高到低排序
