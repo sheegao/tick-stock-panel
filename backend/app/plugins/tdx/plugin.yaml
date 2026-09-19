@@ -1,0 +1,9 @@
+name: tdx
+display_name: "通达信 TDX（本机桥接）"
+runtime: none
+entry: app.plugins.tdx.provider:TdxProvider
+check: app.plugins.tdx.provider:availability
+datasets: [daily, adj_factor, minute, realtime, depth5]
+description: "通过 injoyai/tdx Go 桥接获取原始日K、单事件除权因子、1分钟K、行情快照和五档盘口。非 TickFlow 等价替代：无财务与逐笔 Level2；快照没有可靠交易日期，五档时间为本机接收时间。需自行评估行情授权与服务器可用性。"
+install_hint: "按 docs/tdx-data-source.md 编译并启动 Go 桥接；TDX_BRIDGE_URL 默认 http://127.0.0.1:3020。启动桥接后点击重新加载数据源。"
+homepage: https://github.com/injoyai/tdx

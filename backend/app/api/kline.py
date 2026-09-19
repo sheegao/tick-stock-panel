@@ -404,7 +404,7 @@ def get_daily(
         try:
             from app.tickflow.capabilities import Cap
             if capset and capset.has(Cap.ADJ_FACTOR):
-                factors = kline_sync.fetch_adj_factor_single(symbol)
+                factors = kline_sync.fetch_adj_factor_single(symbol, asset_type=asset_type)
         except Exception as e:  # noqa: BLE001
             logger.debug("单股除权因子拉取失败 %s: %s", symbol, e)
         enriched = compute_enriched(raw, factors=factors)

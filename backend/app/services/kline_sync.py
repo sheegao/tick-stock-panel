@@ -1380,17 +1380,32 @@ def fetch_minute_single(
     return _normalize_minute(_compact_klines_to_df(raw, default_symbol=symbol))
 
 
-def fetch_adj_factor_single(symbol: str) -> pl.DataFrame:
-    """从 TickFlow 实时拉取单股除权因子(不写入本地), 用于单股 K 线即时前复权。
+def fetch_adj_factor_single(symbol: str, asset_type: str = "stock") -> pl.DataFrame:
+    """按独立除权路由拉取单股因子(不写入本地), 用于单股 K 线即时前复权。
 
     返回结构: symbol, trade_date, ex_factor (空 DataFrame 表示无除权事件或拉取失败)。
     与 _apply_adj_factor / compute_enriched 的 factors 参数格式一致。
     """
-    tf = get_client()
+    provider_name = preferences.get_adj_factor_provider()
     try:
+        if provider_name != "tickflow":
+            from app.data_providers import custom as custom_sources
+
+            if custom_sources.provider_has_dataset(provider_name, "adj_factor"):
+                provider = custom_sources.get_provider(provider_name)
+                raw = provider.get_adj_factors(
+                    [symbol],
+                    start_time=None,
+                    end_time=None,
+                    asset_type=asset_type,
+                )
+                return _normalize_adj_factor(raw)
+        tf = get_client()
         raw = tf.klines.ex_factors([symbol], as_dataframe=False, show_progress=False)
     except Exception as e:  # noqa: BLE001
-        logger.warning("fetch_adj_factor_single(%s) failed: %s", symbol, e)
+        logger.warning(
+            "fetch_adj_factor_single(%s, provider=%s) failed: %s", symbol, provider_name, e
+        )
         return pl.DataFrame()
     return _normalize_adj_factor(raw)
 

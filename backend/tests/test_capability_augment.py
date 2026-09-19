@@ -152,3 +152,30 @@ def test_update_data_providers_refreshes_capability_snapshot(monkeypatch):
         mock_request,
     )
     assert mock_request.app.state.capabilities is sentinel
+
+
+def test_switching_depth_provider_restarts_depth_service(monkeypatch):
+    """五档路由切换后立即按新能力快照重新评估轮询, 无需重启后端。"""
+    from app.api import settings as settings_api
+    from app.services import preferences
+
+    state = {"depth5_data_provider": "tickflow"}
+    monkeypatch.setattr(preferences, "save", lambda updates: state.update(updates))
+    monkeypatch.setattr(
+        preferences, "get_depth5_data_provider", lambda: state["depth5_data_provider"]
+    )
+    sentinel = CapabilitySet()
+    sentinel.grant(Cap.DEPTH5_BATCH)
+    monkeypatch.setattr(settings_api, "detect_capabilities", lambda: sentinel)
+    depth_service = MagicMock()
+    request = MagicMock()
+    request.app.state.depth_service = depth_service
+
+    settings_api.update_data_providers(
+        MagicMock(model_dump=lambda exclude_none: {"depth5_data_provider": "tdx"}),
+        request,
+    )
+
+    assert request.app.state.capabilities is sentinel
+    depth_service.stop_polling.assert_called_once_with()
+    depth_service.start_polling.assert_called_once_with()

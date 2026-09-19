@@ -786,10 +786,19 @@ def update_data_providers(req: DataProvidersIn, request: Request) -> dict:
     """保存数据源选择。"""
     from app.services import preferences
     updates = req.model_dump(exclude_none=True)
+    old_depth_provider = preferences.get_depth5_data_provider()
     if updates:
         preferences.save(updates)
     # 刷新能力快照: 当前 provider 变化会改变自定义源能力增广结果 (读缓存, 无网络请求)
     request.app.state.capabilities = detect_capabilities()
+    new_depth_provider = preferences.get_depth5_data_provider()
+    if old_depth_provider != new_depth_provider:
+        # 五档线程只在启动时评估过能力。切换来源后立即按新快照重启判断，
+        # 避免卡片已显示服务中、实际轮询仍停留在旧来源/未启动。
+        depth_svc = getattr(request.app.state, "depth_service", None)
+        if depth_svc is not None:
+            depth_svc.stop_polling()
+            depth_svc.start_polling()
     return {
         "daily_data_provider": preferences.get_daily_data_provider(),
         "adj_factor_provider": preferences.get_adj_factor_provider(),

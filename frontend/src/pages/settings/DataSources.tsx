@@ -44,6 +44,7 @@ import { CAP_LABELS, TIER_RANK, tierRank, tierStyle, TierTag } from '@/lib/capab
 import { toast } from '@/components/Toast'
 import { DataSourceEditor } from './DataSourceEditor'
 import { TickFlowKeySection, TierHelpPopover, useInvalidateTierRelated } from './Keys'
+import { pluginSetupHint } from './plugin-setup'
 
 const DATASET_LABEL: Record<string, string> = {
   realtime: '实时',
@@ -780,8 +781,7 @@ export function SettingsDataSourcesPanel({ highlight }: { highlight?: string } =
               <div
                 key={item.name}
                 onClick={() => {
-                  // 未就绪插件仅当支持界面配 Key 时可点开(进详情配置); 其余不可选
-                  if (pluginUnavailable && !plugin?.api_key_env) return
+                  // 查看介绍/启动说明不等于切换来源; 未就绪源的路由按钮仍不可用。
                   setSelected(item.name)
                   // 只有用户自定义源 (YAML) 才进编辑器; tickflow 和插件不可编辑
                   if (customNames.has(item.name)) {
@@ -790,7 +790,7 @@ export function SettingsDataSourcesPanel({ highlight }: { highlight?: string } =
                 }}
                 className={`relative text-left rounded-lg border px-3.5 py-3 transition-all ${
                   pluginUnavailable && !plugin?.api_key_env
-                    ? 'border-border/40 bg-elevated/10 opacity-70'
+                    ? 'border-border/40 bg-elevated/10 opacity-70 cursor-pointer'
                     : isSelected
                       ? 'border-accent/50 bg-accent/5 ring-1 ring-accent/20 cursor-pointer'
                       : 'border-border/60 bg-elevated/20 hover:bg-elevated/40 cursor-pointer'
@@ -825,7 +825,7 @@ export function SettingsDataSourcesPanel({ highlight }: { highlight?: string } =
                     {servingCount > 0
                       ? `服务中 ${servingCount} 项能力`
                       : pluginUnavailable
-                        ? (plugin?.runtime === 'none' ? '点击配置 Key' : (plugin?.install_hint || plugin?.status || ''))
+                        ? pluginSetupHint(plugin)
                         : ''}
                   </span>
                   <div className="flex items-center gap-1 shrink-0">
@@ -1041,7 +1041,10 @@ function PluginDetail({ plugin, isActive, matrixCaps, servingSet }: {
           {/* 独立状态行仅用于无 Key 配置区的插件; 有 Key 区时「状态」行已展示, 避免重复 */}
           {!plugin.available && !plugin.api_key_env && (
             <div className="flex items-center gap-3">
-              <span className="text-xs text-muted">{plugin.status}</span>
+              <div className="text-xs text-muted space-y-2">
+                <p>{plugin.status}</p>
+                {plugin.install_hint && <p>{plugin.install_hint}</p>}
+              </div>
             </div>
           )}
 
